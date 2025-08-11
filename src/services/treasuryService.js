@@ -123,20 +123,20 @@ export class TreasuryService {
 			console.log('Treasury sending winnings...');
 			console.log('From:', this.treasuryAccount.address);
 			console.log('To:', winnerAddress);
-			console.log('Amount:', amountEth, 'ETH');
+			console.log('Amount:', amountEth, 'STT');
 
 			// Check treasury balance first
 			const treasuryBalance = await this.getTreasuryBalance();
-			console.log('Treasury balance:', treasuryBalance, 'ETH');
+			console.log('Treasury balance:', treasuryBalance, 'STT');
 			if (treasuryBalance < amountEth) {
 				throw new Error(
 					`Insufficient treasury balance. Has ${treasuryBalance.toFixed(
 						6
-					)} ETH but needs ${amountEth.toFixed(6)} ETH`
+					)} STT but needs ${amountEth.toFixed(6)} STT`
 				);
 			}
 
-			// Send ETH transaction
+			// Send STT transaction
 			const hash = await this.walletClient.sendTransaction({
 				to: winnerAddress,
 				value: parseEther(amountEth.toString()),
