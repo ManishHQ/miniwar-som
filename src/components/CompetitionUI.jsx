@@ -200,7 +200,7 @@ export default function CompetitionUI({
 			) {
 				setError('Transaction cancelled by user.');
 			} else {
-				setError(err?.message || 'Failed to stake ETH. Please try again.');
+				setError(err?.message || 'Failed to stake STT. Please try again.');
 			}
 		} finally {
 			setLoading(false);
@@ -226,7 +226,7 @@ export default function CompetitionUI({
 	return (
 		<div className='fixed inset-0 z-50 flex items-center justify-center'>
 			<div className='relative flex flex-col w-full max-w-lg gap-6 p-8 mx-4 bg-white shadow-2xl rounded-2xl animate-fadeIn'>
-				<h2 className='mb-4 text-3xl font-bold text-center'>🎮 ETH War</h2>
+				<h2 className='mb-4 text-3xl font-bold text-center'>🎮 Mini War</h2>
 				{isConnected && activeChainId !== somniaTestnet.id && (
 					<div className='p-3 text-sm text-yellow-900 bg-yellow-100 border border-yellow-300 rounded'>
 						Wrong network.{' '}
@@ -271,11 +271,11 @@ export default function CompetitionUI({
 							</button>
 						</div>
 						<div className='text-sm text-center text-gray-600'>
-							<p>🔒 Secure ETH staking required to play</p>
-							<p>💰 Winner takes all staked ETH</p>
+							<p>🔒 Secure STT staking required to play</p>
+							<p>💰 Winner takes all staked STT</p>
 							{totalStakedAmount > 0 && (
 								<p className='text-green-600'>
-									🏆 Current Prize Pool: {totalStakedAmount.toFixed(6)} ETH
+									🏆 Current Prize Pool: {totalStakedAmount.toFixed(6)} STT
 								</p>
 							)}
 						</div>
@@ -300,7 +300,7 @@ export default function CompetitionUI({
 						</div>
 
 						<div className='flex flex-col gap-2'>
-							<label className='font-semibold'>Stake Amount (ETH)</label>
+							<label className='font-semibold'>Stake Amount (STT)</label>
 							<input
 								className='px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-400'
 								type='number'
@@ -349,7 +349,7 @@ export default function CompetitionUI({
 							) : hasStaked || localStorage.getItem('hasStaked') === 'true' ? (
 								'Already Staked ✓'
 							) : (
-								`💎 Stake ${stakeAmount} ETH & ${
+								`💎 Stake ${stakeAmount} STT & ${
 									mode === 'create' ? 'Create Room' : 'Join Room'
 								}`
 							)}
