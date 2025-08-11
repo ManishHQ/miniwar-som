@@ -96,7 +96,7 @@ export const Leaderboard = () => {
 			// Use treasury service to send winnings
 			const result = await treasuryService.sendWinnings(
 				address,
-				0.04 // STT amount (equivalent to ETH on Somnia testnet)
+				0.04 // STT amount (equivalent to STT on Somnia testnet)
 			);
 
 			console.log('Redeem result:', result);
