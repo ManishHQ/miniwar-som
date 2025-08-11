@@ -1,28 +1,67 @@
-import { createPublicClient, createWalletClient, http, parseEther, formatEther } from 'viem';
+import {
+	createPublicClient,
+	createWalletClient,
+	http,
+	parseEther,
+	formatEther,
+	defineChain,
+} from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { mainnet, sepolia } from 'viem/chains';
 
-// Treasury configuration
-const TREASURY_PRIVATE_KEY = '0x' + 'your-private-key-here'; // Replace with actual EVM private key
-const RPC_ENDPOINT = 'https://eth.llamarpc.com'; // Public Ethereum RPC
-const CHAIN = sepolia; // Using Sepolia testnet for development
+// Somnia Testnet chain definition
+// Read from Vite env (must be prefixed with VITE_) and normalize
+const rawRpc = import.meta.env.VITE_SOMNIA_RPC_URL;
+const RPC_ENDPOINT = rawRpc
+	? rawRpc.startsWith('http')
+		? rawRpc
+		: `https://${rawRpc}`
+	: 'https://rpc.ankr.com/somnia_testnet/6e3fd81558cf77b928b06b38e9409b4677b637118114e83364486294d5ff4811';
+
+export const somniaTestnet = defineChain({
+	id: 50312,
+	name: 'Somnia Testnet',
+	network: 'somnia-testnet',
+	nativeCurrency: { name: 'Somnia Testnet Token', symbol: 'STT', decimals: 18 },
+	rpcUrls: {
+		default: { http: [RPC_ENDPOINT] },
+		public: { http: [RPC_ENDPOINT] },
+	},
+	blockExplorers: {
+		default: {
+			name: 'Somnia Explorer',
+			url: 'https://shannon-explorer.somnia.network',
+		},
+	},
+});
+
+// Treasury configuration (private key WILL be exposed in bundle – do NOT use a real key in production)
+const envPk = import.meta.env.VITE_TREASURY_PRIVATE_KEY;
+const TREASURY_PRIVATE_KEY = envPk ? '0x' + envPk.replace(/^0x/, '') : null;
+const CHAIN = somniaTestnet;
 
 export class TreasuryService {
 	constructor() {
-		this.publicClient = createPublicClient({
-			chain: CHAIN,
-			transport: http(RPC_ENDPOINT),
-		});
-
-		// Initialize treasury account from private key
-		// In production, this should be stored securely (environment variables, key management service, etc.)
 		try {
-			this.treasuryAccount = privateKeyToAccount(TREASURY_PRIVATE_KEY);
-			this.walletClient = createWalletClient({
-				account: this.treasuryAccount,
+			if (!TREASURY_PRIVATE_KEY) {
+				console.warn(
+					'Treasury private key missing (VITE_TREASURY_PRIVATE_KEY)'
+				);
+			}
+			this.publicClient = createPublicClient({
 				chain: CHAIN,
 				transport: http(RPC_ENDPOINT),
 			});
+			if (TREASURY_PRIVATE_KEY) {
+				this.treasuryAccount = privateKeyToAccount(TREASURY_PRIVATE_KEY);
+				this.walletClient = createWalletClient({
+					account: this.treasuryAccount,
+					chain: CHAIN,
+					transport: http(RPC_ENDPOINT),
+				});
+			} else {
+				this.treasuryAccount = null;
+				this.walletClient = null;
+			}
 		} catch (error) {
 			console.error('Failed to initialize treasury account:', error);
 			this.treasuryAccount = null;
@@ -32,9 +71,12 @@ export class TreasuryService {
 
 	// Get treasury address
 	getTreasuryAddress() {
-		return this.treasuryAccount
-			? this.treasuryAccount.address
-			: null;
+		// Use environment variable if available, fallback to derived address
+		const envAddress = import.meta.env.VITE_TREASURY_ADDRESS;
+		if (envAddress) {
+			return envAddress;
+		}
+		return this.treasuryAccount ? this.treasuryAccount.address : null;
 	}
 
 	// Check if treasury is properly initialized and funded
@@ -103,8 +145,8 @@ export class TreasuryService {
 			console.log('Transaction sent, hash:', hash);
 
 			// Wait for confirmation
-			const receipt = await this.publicClient.waitForTransactionReceipt({ 
-				hash 
+			await this.publicClient.waitForTransactionReceipt({
+				hash,
 			});
 
 			console.log('Transaction confirmed');
@@ -141,7 +183,7 @@ export class TreasuryService {
 	}
 
 	// Verify staking transaction
-	async verifyStakingTransaction(hash, expectedAmount, stakingAddress) {
+	async verifyStakingTransaction(hash, expectedAmount) {
 		try {
 			const transaction = await this.publicClient.getTransaction({
 				hash,

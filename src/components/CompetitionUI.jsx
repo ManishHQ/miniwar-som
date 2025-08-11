@@ -1,9 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ConnectWalletButton } from './WalletProvider';
 import { myPlayer, useMultiplayerState } from 'playroomkit';
-import { useAccount, useSendTransaction } from 'wagmi';
+import {
+	useAccount,
+	useSendTransaction,
+	usePublicClient,
+	useChainId,
+	useSwitchChain,
+} from 'wagmi';
 import { parseEther } from 'viem';
-import { treasuryService } from '../services/treasuryService';
+import { somniaTestnet, treasuryService } from '../services/treasuryService';
 
 export default function CompetitionUI({
 	hasStaked,
@@ -31,7 +37,34 @@ export default function CompetitionUI({
 	);
 
 	const { address, isConnected } = useAccount();
-	const { sendTransaction } = useSendTransaction();
+	const { sendTransactionAsync } = useSendTransaction();
+	const publicClient = usePublicClient();
+	const activeChainId = useChainId();
+	const { switchChain } = useSwitchChain();
+
+	useEffect(() => {
+		if (!showStakeModal) return;
+		try {
+			let rid = null;
+			// Hash fragment format: #r=ROOMID or #r=ROOMID&other=...
+			if (window.location.hash) {
+				const frag = window.location.hash.replace(/^#/, '');
+				const hashParams = new URLSearchParams(frag);
+				rid = hashParams.get('r');
+			}
+			// Also support query param ?r=ROOMID
+			if (!rid && window.location.search) {
+				const qs = new URLSearchParams(window.location.search);
+				rid = qs.get('r');
+			}
+			if (rid) {
+				setMode((m) => (m === '' ? 'join' : m));
+				setRoomId(rid);
+			}
+		} catch (e) {
+			console.warn('Room deeplink parse failed', e);
+		}
+	}, [showStakeModal]);
 
 	const handleGoHome = () => {
 		// Clear staking state to allow user to start over
@@ -50,7 +83,7 @@ export default function CompetitionUI({
 		e.preventDefault();
 		setError('');
 		setSuccess(false);
-		let txSignature = '';
+		let txHash = '';
 
 		// Triple-check to prevent duplicate staking
 		if (hasStaked || localStorage.getItem('hasStaked') === 'true') {
@@ -79,6 +112,11 @@ export default function CompetitionUI({
 			return;
 		}
 
+		if (activeChainId && activeChainId !== somniaTestnet.id) {
+			setError('Wrong network. Please switch to Somnia Testnet.');
+			return;
+		}
+
 		setLoading(true);
 		try {
 			// Get treasury address from service
@@ -86,56 +124,53 @@ export default function CompetitionUI({
 			if (!treasuryAddress) {
 				throw new Error('Treasury address not available');
 			}
-
 			console.log({ treasuryAddress });
 
-			// Send ETH transaction
-			txSignature = await sendTransaction({
+			// 1. Send transaction (await user signature)
+			txHash = await sendTransactionAsync({
 				to: treasuryAddress,
 				value: parseEther(stakeAmount.toString()),
+				chainId: somniaTestnet.id,
 			});
+			console.log('Sent tx hash:', txHash);
 
-			// Set player profile in playroomkit
+			// 2. Wait for confirmation
+			const receipt = await publicClient.waitForTransactionReceipt({
+				hash: txHash,
+			});
+			console.log('Receipt status:', receipt.status);
+			if (receipt.status !== 'success') {
+				throw new Error('Transaction failed');
+			}
+
+			// 3. Only now update state to mark staking success
 			const player = myPlayer();
 			if (player) {
 				const playerProfile = {
-					color: '#64b5f6', // Default blue color
+					color: '#64b5f6',
 					photo: `https://api.dicebear.com/7.x/thumbs/svg?seed=${address}`,
 					name: `Player${Math.floor(Math.random() * 1000)}`,
 					wallet: address,
 					stakeAmount,
 				};
 				player.setState('profile', playerProfile);
-
-				// Save profile to localStorage for resuming sessions
 				localStorage.setItem('playerProfile', JSON.stringify(playerProfile));
 			}
 
-			// Add to staking history first
 			const stakeRecord = {
 				wallet: address,
 				amount: stakeAmount,
 				timestamp: Date.now(),
-				txSignature: txSignature,
+				txSignature: txHash,
 			};
-			const updatedStakingHistory = [...stakingHistory, stakeRecord];
-			setStakingHistory(updatedStakingHistory);
-
-			// Update total staked amount using functional update to avoid race conditions
-			setTotalStakedAmount((prevTotal) => {
-				const newTotal = prevTotal + stakeAmount;
-				console.log('Updated total staked amount:', newTotal);
-				return newTotal;
-			});
-
+			setStakingHistory([...stakingHistory, stakeRecord]);
+			setTotalStakedAmount((prevTotal) => prevTotal + stakeAmount);
 			setHasStaked(true);
 			localStorage.setItem('hasStaked', 'true');
 			setSuccess(true);
 
-			// Generate a room ID for created rooms
 			let finalRoomId = roomId.trim();
 			if (mode === 'create') {
-				// Generate a 6-digit numeric room ID
 				const generatedRoomId = Math.floor(
 					100000 + Math.random() * 900000
 				).toString();
@@ -143,21 +178,14 @@ export default function CompetitionUI({
 				finalRoomId = generatedRoomId;
 			}
 
-			// Show transaction hash immediately after confirmation
-			setShowTxHash(txSignature);
-			setCountdown(2); // Show for 2 seconds
-
-			// Start 2-second countdown
+			setShowTxHash(txHash);
+			setCountdown(2);
 			const countdownInterval = setInterval(() => {
 				setCountdown((prev) => {
 					if (prev <= 1) {
 						clearInterval(countdownInterval);
 						setShowStakeModal(false);
-
-						// Start the game with the appropriate mode
-						if (onGameStart) {
-							onGameStart(mode, finalRoomId);
-						}
+						if (onGameStart) onGameStart(mode, finalRoomId);
 						return 0;
 					}
 					return prev - 1;
@@ -165,7 +193,15 @@ export default function CompetitionUI({
 			}, 1000);
 		} catch (err) {
 			console.error('Staking error:', err);
-			setError('Failed to stake ETH. Please try again.');
+			// Detect user rejection (MetaMask & others use code 4001 or specific names)
+			if (
+				err?.code === 4001 ||
+				/UserRejected|Rejected/i.test(err?.message || err?.name)
+			) {
+				setError('Transaction cancelled by user.');
+			} else {
+				setError(err?.message || 'Failed to stake ETH. Please try again.');
+			}
 		} finally {
 			setLoading(false);
 		}
@@ -191,6 +227,18 @@ export default function CompetitionUI({
 		<div className='fixed inset-0 z-50 flex items-center justify-center'>
 			<div className='relative flex flex-col w-full max-w-lg gap-6 p-8 mx-4 bg-white shadow-2xl rounded-2xl animate-fadeIn'>
 				<h2 className='mb-4 text-3xl font-bold text-center'>🎮 ETH War</h2>
+				{isConnected && activeChainId !== somniaTestnet.id && (
+					<div className='p-3 text-sm text-yellow-900 bg-yellow-100 border border-yellow-300 rounded'>
+						Wrong network.{' '}
+						<button
+							type='button'
+							className='font-semibold underline'
+							onClick={() => switchChain({ chainId: somniaTestnet.id })}
+						>
+							Switch to Somnia Testnet
+						</button>
+					</div>
+				)}
 
 				<div className='mb-4 text-center'>
 					<div className='wallet-button-container'>
@@ -288,7 +336,8 @@ export default function CompetitionUI({
 								loading ||
 								!isConnected ||
 								hasStaked ||
-								localStorage.getItem('hasStaked') === 'true'
+								localStorage.getItem('hasStaked') === 'true' ||
+								(activeChainId && activeChainId !== somniaTestnet.id)
 							}
 						>
 							{' '}
@@ -350,7 +399,7 @@ export default function CompetitionUI({
 										</div>
 
 										<a
-											href={`https://sepolia.etherscan.io/tx/${showTxHash}`}
+											href={`https://shannon-explorer.somnia.network/tx/${showTxHash}`}
 											target='_blank'
 											rel='noopener noreferrer'
 											className='inline-flex items-center px-4 py-2 text-sm font-medium text-white transition-colors bg-blue-600 rounded-lg hover:bg-blue-700'
@@ -368,7 +417,7 @@ export default function CompetitionUI({
 													d='M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14'
 												/>
 											</svg>
-											View on Etherscan
+											View on Explorer
 										</a>
 									</div>
 								)}

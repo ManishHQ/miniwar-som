@@ -84,11 +84,11 @@ export const Leaderboard = () => {
 			// Check treasury balance first
 			const treasuryBalance = await treasuryService.getTreasuryBalance();
 			console.log('Treasury balance:', treasuryBalance);
-			if (treasuryBalance < 0.01) {
+			if (treasuryBalance < 0.04) {
 				setRedeemError(
 					`Insufficient treasury balance. Treasury has ${treasuryBalance.toFixed(
 						6
-					)} ETH but needs 0.01 ETH`
+					)} STT but needs 0.04 STT`
 				);
 				return;
 			}
@@ -96,7 +96,7 @@ export const Leaderboard = () => {
 			// Use treasury service to send winnings
 			const result = await treasuryService.sendWinnings(
 				address,
-				0.01 // ETH amount
+				0.04 // STT amount (equivalent to ETH on Somnia testnet)
 			);
 
 			console.log('Redeem result:', result);
@@ -204,9 +204,9 @@ export const Leaderboard = () => {
 						{/* Prize pool display */}
 						<div className='p-3 text-center bg-yellow-100 rounded-lg'>
 							<p className='text-lg font-bold'>💰 Prize Pool</p>
-							<p className='text-2xl font-bold text-yellow-600'>0.01 ETH</p>
+							<p className='text-2xl font-bold text-yellow-600'>0.04 STT</p>
 							<p className='text-sm text-gray-600'>
-								Treasury: {treasuryBalance.toFixed(6)} ETH
+								Treasury: {treasuryBalance.toFixed(6)} STT
 							</p>
 							<p className='text-xs text-gray-500'>
 								Stakes: {stakingHistory.length} players
@@ -259,7 +259,7 @@ export const Leaderboard = () => {
 											Redeeming...
 										</div>
 									) : (
-										`💎 Redeem 0.01 ETH`
+										`💎 Redeem 0.04 STT`
 									)}
 								</button>
 							) : redeemSuccess ? (
@@ -282,7 +282,7 @@ export const Leaderboard = () => {
 												</code>
 											</div>
 											<a
-												href={`https://sepolia.etherscan.io/tx/${redeemTxHash}`}
+												href={`https://shannon-explorer.somnia.network/tx/${redeemTxHash}`}
 												target='_blank'
 												rel='noopener noreferrer'
 												className='inline-flex items-center px-4 py-2 text-sm font-medium text-white transition-colors bg-blue-600 rounded-lg hover:bg-blue-700'
@@ -300,7 +300,7 @@ export const Leaderboard = () => {
 														d='M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14'
 													/>
 												</svg>
-												View on Etherscan
+												View on Somnia Explorer
 											</a>
 											{redeemCountdown > 0 && (
 												<div className='p-3 mt-4 border border-blue-200 rounded-lg bg-blue-50'>
