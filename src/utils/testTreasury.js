@@ -15,7 +15,7 @@ export const testTreasuryService = () => {
 	treasuryService
 		.getTreasuryBalance()
 		.then((balance) => {
-			console.log('💰 Treasury balance:', balance, 'ETH');
+			console.log('💰 Treasury balance:', balance, 'STT');
 		})
 		.catch((error) => {
 			console.log('❌ Error getting treasury balance:', error);
